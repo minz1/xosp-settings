@@ -56,9 +56,6 @@ public class DeviceInfoSettings extends SettingsPreferenceFragment implements In
 
     private static final String LOG_TAG = "DeviceInfoSettings";
 
-    private static final String KEY_MANUAL = "manual";
-    private static final String KEY_REGULATORY_INFO = "regulatory_info";
-    private static final String KEY_SYSTEM_UPDATE_SETTINGS = "system_update_settings";
     private static final String PROPERTY_URL_SAFETYLEGAL = "ro.url.safetylegal";
     private static final String PROPERTY_SELINUX_STATUS = "ro.build.selinux";
     private static final String KEY_KERNEL_VERSION = "kernel_version";
@@ -69,20 +66,18 @@ public class DeviceInfoSettings extends SettingsPreferenceFragment implements In
     private static final String KEY_BASEBAND_VERSION = "baseband_version";
     private static final String KEY_FIRMWARE_VERSION = "firmware_version";
     private static final String KEY_SECURITY_PATCH = "security_patch";
-    private static final String KEY_UPDATE_SETTING = "additional_system_update_settings";
-    private static final String KEY_EQUIPMENT_ID = "fcc_equipment_id";
     private static final String PROPERTY_EQUIPMENT_ID = "ro.ril.fccid";
-    private static final String KEY_DEVICE_FEEDBACK = "device_feedback";
     private static final String KEY_SAFETY_LEGAL = "safetylegal";
-    private static final String KEY_MBN_VERSION = "mbn_version";
     private static final String PROPERTY_MBN_VERSION = "persist.mbn.version";
     private static final String KEY_QGP_VERSION = "qgp_version";
     private static final String PROPERTY_QGP_VERSION = "persist.qgp.version";
     private static final String MBN_VERSION_PATH = "/persist/speccfg/mbnversion";
     private static final String QGP_VERSION_PATH = "/persist/speccfg/qgpversion";
     private static final String KEY_MOD_VERSION = "mod_version";
+    private static final String KEY_XOSP_REVISION="xosp_revision";
+    private static final String KEY_XOSP_RELEASE="xosp_release";
     private static final String KEY_MOD_BUILD_DATE = "build_date";
-    private static final String KEY_MOD_API_LEVEL = "mod_api_level";
+    private static final String PROPERTY_QGP_VERSION = "persist.qgp.version";
 
     static final int TAPS_TO_BE_A_DEVELOPER = 7;
 
@@ -126,32 +121,19 @@ public class DeviceInfoSettings extends SettingsPreferenceFragment implements In
         }
 
         setValueSummary(KEY_BASEBAND_VERSION, "gsm.version.baseband");
-        setValueSummary(KEY_EQUIPMENT_ID, PROPERTY_EQUIPMENT_ID);
+        setStringSummary(KEY_DEVICE_MODEL, Build.MODEL + DeviceInfoUtils.getMsvSuffix());
         setStringSummary(KEY_DEVICE_MODEL, Build.MODEL);
         setStringSummary(KEY_BUILD_NUMBER, Build.DISPLAY);
         findPreference(KEY_BUILD_NUMBER).setEnabled(true);
-        //setValueSummary(KEY_QGP_VERSION, PROPERTY_QGP_VERSION);
-        // Remove QGP Version if property is not present
-        //removePreferenceIfPropertyMissing(getPreferenceScreen(), KEY_QGP_VERSION,
-        //        PROPERTY_QGP_VERSION);
-        String mQGPVersion = getQGPVersionValue();
-        setStringSummary(KEY_QGP_VERSION, mQGPVersion);
-        if(mQGPVersion == null){
-            getPreferenceScreen().removePreference(findPreference(KEY_QGP_VERSION));
-        }
         findPreference(KEY_KERNEL_VERSION).setSummary(DeviceInfoUtils.customizeFormatKernelVersion(
                 getResources().getBoolean(R.bool.def_hide_kernel_version_name)));
-        String mMbnVersion = getMBNVersionValue();
-        setStringSummary(KEY_MBN_VERSION, mMbnVersion);
-        if(mMbnVersion == null){
-            getPreferenceScreen().removePreference(findPreference(KEY_MBN_VERSION));
-        }
-        findPreference(KEY_MOD_VERSION).setSummary(
-                cyanogenmod.os.Build.CYANOGENMOD_DISPLAY_VERSION);
+        setValueSummary(KEY_MOD_VERSION, "ro.mod.version");
         findPreference(KEY_MOD_VERSION).setEnabled(true);
+        setValueSummary(KEY_XOSP_RELEASE, "ro.xosp.release");
+        findPreference(KEY_XOSP_RELEASE).setEnabled(true);
+        setValueSummary(KEY_XOSP_REVISION, "ro.xosp.revision");
+        findPreference(KEY_XOSP_REVISION).setEnabled(true);
         setValueSummary(KEY_MOD_BUILD_DATE, "ro.build.date");
-        setExplicitValueSummary(KEY_MOD_API_LEVEL, constructApiLevelString());
-        findPreference(KEY_MOD_API_LEVEL).setEnabled(true);
 
         if (!SELinux.isSELinuxEnabled()) {
             String status = getResources().getString(R.string.selinux_status_disabled);
@@ -172,18 +154,9 @@ public class DeviceInfoSettings extends SettingsPreferenceFragment implements In
         removePreferenceIfPropertyMissing(getPreferenceScreen(), KEY_SAFETY_LEGAL,
                 PROPERTY_URL_SAFETYLEGAL);
 
-        // Remove Equipment id preference if FCC ID is not set by RIL
-        removePreferenceIfPropertyMissing(getPreferenceScreen(), KEY_EQUIPMENT_ID,
-                PROPERTY_EQUIPMENT_ID);
-
         // Remove Baseband version if wifi-only device
         if (Utils.isWifiOnly(getActivity())) {
             getPreferenceScreen().removePreference(findPreference(KEY_BASEBAND_VERSION));
-        }
-
-        // Dont show feedback option if there is no reporter.
-        if (TextUtils.isEmpty(DeviceInfoUtils.getFeedbackReporterPackage(getActivity()))) {
-            getPreferenceScreen().removePreference(findPreference(KEY_DEVICE_FEEDBACK));
         }
 
         /*
@@ -195,37 +168,6 @@ public class DeviceInfoSettings extends SettingsPreferenceFragment implements In
         // These are contained by the root preference screen
         PreferenceGroup parentPreference = getPreferenceScreen();
 
-        if (mUm.isAdminUser()) {
-            Utils.updatePreferenceToSpecificActivityOrRemove(act, parentPreference,
-                    KEY_SYSTEM_UPDATE_SETTINGS,
-                    Utils.UPDATE_PREFERENCE_FLAG_SET_TITLE_TO_MATCHING_ACTIVITY);
-        } else {
-            // Remove for secondary users
-            removePreference(KEY_SYSTEM_UPDATE_SETTINGS);
-        }
-
-        // Read platform settings for additional system update setting
-        removePreferenceIfBoolFalse(KEY_UPDATE_SETTING,
-                R.bool.config_additional_system_update_setting_enable);
-
-        // Remove manual entry if none present.
-        removePreferenceIfBoolFalse(KEY_MANUAL, R.bool.config_show_manual);
-
-        // Remove regulatory information if none present or config_show_regulatory_info is disabled
-        final Intent intent = new Intent(Settings.ACTION_SHOW_REGULATORY_INFO);
-        if (getPackageManager().queryIntentActivities(intent, 0).isEmpty()
-                || !getResources().getBoolean(R.bool.config_show_regulatory_info)) {
-            Preference pref = findPreference(KEY_REGULATORY_INFO);
-            if (pref != null) {
-                getPreferenceScreen().removePreference(pref);
-            }
-        }
-        // Remove regulatory labels if no activity present to handle intent.
-        removePreferenceIfActivityMissing(
-                KEY_REGULATORY_INFO, Settings.ACTION_SHOW_REGULATORY_INFO);
-
-        removePreferenceIfActivityMissing(
-                "safety_info", "android.settings.SHOW_SAFETY_AND_REGULATORY_INFO");
     }
 
     @Override
@@ -323,22 +265,6 @@ public class DeviceInfoSettings extends SettingsPreferenceFragment implements In
                 mDevHitToast = Toast.makeText(getActivity(), R.string.show_dev_already_cm,
                         Toast.LENGTH_LONG);
                 mDevHitToast.show();
-            }
-        } else if (preference.getKey().equals(KEY_SECURITY_PATCH)) {
-            if (getPackageManager().queryIntentActivities(preference.getIntent(), 0).isEmpty()) {
-                // Don't send out the intent to stop crash
-                Log.w(LOG_TAG, "Stop click action on " + KEY_SECURITY_PATCH + ": "
-                        + "queryIntentActivities() returns empty" );
-                return true;
-            }
-        } else if (preference.getKey().equals(KEY_DEVICE_FEEDBACK)) {
-            sendFeedback();
-        } else if(preference.getKey().equals(KEY_SYSTEM_UPDATE_SETTINGS)) {
-            CarrierConfigManager configManager =
-                    (CarrierConfigManager) getSystemService(Context.CARRIER_CONFIG_SERVICE);
-            PersistableBundle b = configManager.getConfig();
-            if (b != null && b.getBoolean(CarrierConfigManager.KEY_CI_ACTION_ON_SYS_UPDATE_BOOL)) {
-                ciActionOnSysUpdate(b);
             }
         }
         return super.onPreferenceTreeClick(preference);
@@ -535,26 +461,11 @@ public class DeviceInfoSettings extends SettingsPreferenceFragment implements In
                 if (isPropertyMissing(PROPERTY_URL_SAFETYLEGAL)) {
                     keys.add(KEY_SAFETY_LEGAL);
                 }
-                if (isPropertyMissing(PROPERTY_EQUIPMENT_ID)) {
-                    keys.add(KEY_EQUIPMENT_ID);
-                }
                 // Remove Baseband version if wifi-only device
                 if (Utils.isWifiOnly(context)) {
                     keys.add((KEY_BASEBAND_VERSION));
                 }
-                // Dont show feedback option if there is no reporter.
-                if (TextUtils.isEmpty(DeviceInfoUtils.getFeedbackReporterPackage(context))) {
-                    keys.add(KEY_DEVICE_FEEDBACK);
-                }
                 final UserManager um = UserManager.get(context);
-                // TODO: system update needs to be fixed for non-owner user b/22760654
-                if (!um.isAdminUser()) {
-                    keys.add(KEY_SYSTEM_UPDATE_SETTINGS);
-                }
-                if (!context.getResources().getBoolean(
-                        R.bool.config_additional_system_update_setting_enable)) {
-                    keys.add(KEY_UPDATE_SETTING);
-                }
                 return keys;
             }
 
